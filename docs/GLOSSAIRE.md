@@ -7,4 +7,5 @@ L'agent relève les candidats ; l'utilisateur arbitre et rédige.
 
 | Terme (FR) | Identifiant (code) | Définition (une phrase) |
 |---|---|---|
-| hibernation | `hibernate` | Mise hors tension prolongée : la RAM est écrite sur le disque, la machine s'éteint — à distinguer de la *suspension* (en RAM, consommation résiduelle). Candidat, à arbitrer par l'utilisateur. |
+| hibernation | `hibernate` | Mise hors tension prolongée : la RAM est écrite sur le disque, la machine s'éteint — à distinguer de la *suspension* (en RAM, consommation résiduelle). |
+| seuil | `threshold` | niveau de batterie choisi par l'utilisateur comme niveau minimum de batterie avant mise en hibernation |
