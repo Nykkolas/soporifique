@@ -11,24 +11,50 @@ pub fn update(model: Model, message: Message) -> (Model, Vec<Command>) {
     }
 }
 
-/// Étape 3 → 4 : la demande de confirmation s'ouvre — le modèle
-/// précédent est ignoré car l'ouverture est idempotente (déjà ouverte
-/// → déjà ouverte).
-fn ask_quit(_model: Model) -> (Model, Vec<Command>) {
-    (Model { quit_request: Some(QuitRequest) }, Vec::new())
+/// Étape 3 → 4 : la demande de confirmation s'ouvre — le reste du
+/// modèle est conservé (mise à jour fonctionnelle, cf. `docs/RUST-TEA.md`),
+/// l'ouverture étant idempotente (déjà ouverte → déjà ouverte).
+/// Mise à jour fonctionnelle anticipée : `..model` est volontairement
+/// redondant tant que `Model` n'a qu'un champ (rustc parle de variable
+/// inutilisée, clippy de « needless update ») — il préserve les champs
+/// futurs (fenêtre UC-04, seuil UC-01), cf. audit 2026-11-09.
+#[allow(unused_variables, clippy::needless_update)]
+fn ask_quit(model: Model) -> (Model, Vec<Command>) {
+    (
+        Model {
+            quit_request: Some(QuitRequest),
+            ..model
+        },
+        Vec::new(),
+    )
 }
 
 /// Étapes 5 / 5a : « Oui » ordonne l'arrêt et referme la demande ;
 /// « Non » la referme sans rien ordonner. Hors demande ouverte, le
-/// message est ignoré (un clic sous une fenêtre disparue ne quitte pas).
+/// message est ignoré (un clic sous une fenêtre disparue ne quitte
+/// pas). Le reste du modèle est toujours conservé — un futur champ
+/// (fenêtre UC-04, seuil UC-01) ne doit jamais être écrasé ici.
+/// La garde des actions vit ici : cf. `ask_quit` pour la mise à jour
+/// fonctionnelle anticipée (`..model`), cf. audit 2026-11-09.
+#[allow(clippy::needless_update)]
 fn resolve_quit(model: Model, confirmed: bool) -> (Model, Vec<Command>) {
-    let Model { quit_request } = model;
-    match quit_request {
-        Some(_) if confirmed => (
-            Model { quit_request: None },
+    let quit_requested = model.quit_request.is_some();
+    match (quit_requested, confirmed) {
+        (true, true) => (
+            Model {
+                quit_request: None,
+                ..model
+            },
             vec![Command::ExitApplication],
         ),
-        _ => (Model { quit_request: None }, Vec::new()),
+        (true, false) => (
+            Model {
+                quit_request: None,
+                ..model
+            },
+            Vec::new(),
+        ),
+        (false, _) => (model, Vec::new()),
     }
 }
 

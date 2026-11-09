@@ -12,6 +12,13 @@ use crate::{
     command::Command, labels, message::Message, model::Model, update::update, view::view,
 };
 
+/// Tick de `step` à partir duquel la fenêtre racine peut être cachée :
+/// eframe la force visible après son premier rendu (anti-flash blanc,
+/// cf. le bloc 2 de `step`) — cacher avant serait déjoué par ce forçage
+/// et laisserait la fenêtre à l'écran. Constante couplée au comportement
+/// d'eframe, à revoir à chaque upgrade.
+const ROOT_HIDE_TICK: u32 = 2;
+
 /// Effet de fenêtre ordonné au harnais — jamais exécuté ici.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WindowEffect {
@@ -109,9 +116,12 @@ impl Runtime {
         // 2. eframe force l'affichage de la fenêtre après le premier
         //    rendu (anti-flash blanc,
         //    `eframe::native::epi_integration::post_rendering`) : la
-        //    recacher une fois ce rendu passé (tick ≥ 2).
+        //    cacher seulement une fois ce rendu passé. Cacher plus tôt
+        //    serait déjoué par l'affichage forcé du premier rendu ;
+        //    ce seuil est couplé au comportement d'eframe (constante
+        //    ci-dessous) — à revoir à chaque upgrade d'eframe.
         self.logic_ticks = self.logic_ticks.saturating_add(1);
-        if self.logic_ticks >= 2 && !self.root_hidden_once {
+        if self.logic_ticks >= ROOT_HIDE_TICK && !self.root_hidden_once {
             self.root_hidden_once = true;
             effects.push(WindowEffect::Hide {
                 title: labels::APP_TITLE.into(),
@@ -243,5 +253,36 @@ mod tests {
         let effects = runtime.step(false);
         assert!(effects.contains(&hide()), "« Non » referme la fenêtre");
         assert!(!effects.contains(&WindowEffect::Close), "« Non » n'ordonne jamais la fermeture");
+    }
+
+    /// Contrat de construction : `Runtime::default()` et
+    /// `Runtime::new()` doivent être comportementalement
+    /// indiscernables. Tautologique tant que `Default` délègue à
+    /// `new()` — c'est un filet de sécurité : le jour où les deux
+    /// chemins deviennent indépendants (ex. `derive(Default)` sans
+    /// inversion de délégation, ou impl manuelle qui dérive), la
+    /// moindre divergence d'état initial doit tomber rouge ici
+    /// (vérifié par mutation sur `logic_ticks`).
+    #[test]
+    fn default_construction_behaves_like_new() {
+        fn scenario(runtime: &mut Runtime) -> Vec<Vec<WindowEffect>> {
+            let mut trace = vec![runtime.step(false)];
+            runtime.receive(Message::QuitRequested);
+            trace.push(runtime.step(false));
+            trace.push(runtime.step(true)); // ✕ ≡ « Non »
+            runtime.receive(Message::QuitConfirmed);
+            trace.push(runtime.step(false)); // arrêt ordonné
+            trace.push(runtime.step(true)); // fermeture réfléchie, pas annulée
+            trace
+        }
+
+        let mut via_new = Runtime::new();
+        let mut via_default = Runtime::default();
+        assert_eq!(
+            scenario(&mut via_new),
+            scenario(&mut via_default),
+            "Runtime::default() et Runtime::new() doivent être indiscernables \
+             (même état initial, même comportement)"
+        );
     }
 }

@@ -11,6 +11,11 @@ use std::sync::mpsc::Sender;
 use soporifique::labels;
 use soporifique::message::Message;
 
+/// Nom d'icône freedesktop standard « quitter » (UC-05, étape 2 : « un
+/// icône parlant » ; convention plateforme d'abord, cf.
+/// `docs/UX-GENERIC.md`).
+const QUIT_MENU_ICON: &str = "application-exit";
+
 /// L'icône : un croissant de lune — Soporifique veille pendant que la
 /// machine s'endort.
 pub struct SoporifiqueTray {
@@ -53,10 +58,7 @@ impl Tray for SoporifiqueTray {
         vec![
             StandardItem {
                 label: labels::TRAY_MENU_QUIT.into(),
-                // Icône standard freedesktop « quitter » (UC-05 étape 2 :
-                // « un icône parlant » ; convention plateforme d'abord,
-                // cf. docs/UX-GENERIC.md).
-                icon_name: "application-exit".into(),
+                icon_name: QUIT_MENU_ICON.into(),
                 activate: Box::new(|tray: &mut Self| {
                     // UC-05, étape 3 : émettre, c'est tout.
                     tray.post(Message::QuitRequested);
