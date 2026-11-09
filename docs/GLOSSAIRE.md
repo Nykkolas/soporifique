@@ -9,3 +9,4 @@ L'agent relève les candidats ; l'utilisateur arbitre et rédige.
 |---|---|---|
 | hibernation | `hibernate` | Mise hors tension prolongée : la RAM est écrite sur le disque, la machine s'éteint — à distinguer de la *suspension* (en RAM, consommation résiduelle). |
 | seuil | `threshold` | niveau de batterie choisi par l'utilisateur comme niveau minimum de batterie avant mise en hibernation |
+| barre d'état système | `tray` | zone d'affichage des icônes système (ex. sur Linux Mint : en bas à droite à côté de l'heure) |

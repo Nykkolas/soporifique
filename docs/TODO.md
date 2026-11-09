@@ -31,6 +31,27 @@ DECISIONS.md d'agents-shared : la session ne voyage pas, les fichiers oui).
   forme du modèle (état actif/inactif persisté ?) et l'UI du tray ;
   distinct de « Quitter l'application » (UC-05).
 
+## Bugs de recette UC-05 (vu en recette visuelle, à corriger)
+
+- Démarrage : une fenêtre apparaît brièvement puis disparaît (flash du
+  premier rendu — eframe force l'affichage, le harnais recache au tick
+  ≥ 2, cf. `hide_root_forever` dans `main.rs`).
+- Organisation de la fenêtre de confirmation à challenger : appliquer
+  réellement les préceptes UX/UI (`docs/UX-GENERIC.md`) — centrage,
+  marges, hiérarchie visuelle, look de dialogue natif.
+- La fenêtre de confirmation apparaît en haut à gauche de l'écran,
+  pas au centre ; non conforme aux conventions de positionnement
+  des dialogues — à corriger avec l'entrée précédente (placement
+  `ViewportCommand`, cf. `egui::ViewportCommand::center_on_screen`).
+- « Oui » ne quitte pas l'application. **Résolu** : drapeau « fermeture
+  demandée par nous » dans le harnais (`self_close` dans `main.rs`) —
+  winit renvoie notre propre `ViewportCommand::Close` sous forme
+  d'évènement `Close` en entrée, indistinguable du ✕ de l'utilisateur ;
+  le garde-fou « ✕ ≡ Non » ne l'annule plus lorsqu'il est marqué
+  nôtre. Reproduit puis verrouillé dans la spec test
+  (`tests/uc05_quitter_application.rs`, phase 6-bug), verte.
+  Recette manuelle à refaire pour confirmation.
+
 ## Remarques en attente (issues de revue UC, non arbitrées)
 
 À trancher avant ou pendant la rédaction des scénarios :
@@ -46,8 +67,12 @@ DECISIONS.md d'agents-shared : la session ne voyage pas, les fichiers oui).
 - UC-05 : localisation de l'action « Quitter » — ✕ de la fenêtre vs
   entrée « Quitter » du menu tray (règle fermer-fenêtre ≠ quitter
   déjà actée dans UC-04 success guarantee).
-- UC-05 : quitter = perte de la protection batterie — l'utilisateur
-  doit-il être averti/confirmé ? À trancher dans le scénario.
+- UC-05 : quitter = perte de la protection batterie — ARBITRÉ :
+  confirmation demandée (étape 4 du scénario, extension 5a).
+- UC-05 : libellés — le menu dit « Fermer Soporifique » alors que le
+  titre de l'UC est « Quitter l'application » et que « fermer » désigne
+  déjà le geste fenêtre ≠ quitter (UC-04) ; harmoniser + candidat
+  glossaire « quitter ↔ quit ». À arbitrer.
 - UC-05 : icône tray résiduelle après l'arrêt — observable testable
   pour la guarantee.
 - Glossaire : candidat « journal » ↔ `log` — utilisé dans les guarantees
@@ -56,6 +81,14 @@ DECISIONS.md d'agents-shared : la session ne voyage pas, les fichiers oui).
   l'utilisateur` = où, quoi, quand) ; mécanisme de persistence commun
   UC-01/UC-03 (même fichier de config ?) ; intervalle de polling
   (déjà en question ouverte UC-02).
+- UC-05 : clic **gauche** sur l'icône tray — comportement non spécifié
+  (probablement : ouvrir la configuration) ; sera tranché avec
+  l'implémentation de l'UC-01. Le menu tray sera partagé par Quitter
+  (UC-05), Configuration (UC-04) et « Arrêter la surveillance » plus
+  tard — candidate SR « structure du menu tray ».
+- UC-05 : extension « échec de l'arrêt » (jouer la minimal guarantee)
+  volontairement omise pour rester simple — première implémentation ;
+  à ajouter si besoin en passe ultérieure.
 - UC-01 : coquille « pré-éxistante » → « préexistante ».
 - UC-04 : coquille « si il y a » → « s'il y a ».
 
