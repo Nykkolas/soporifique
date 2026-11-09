@@ -128,3 +128,47 @@ fn quitting_from_tray_menu_shows_confirmation_then_exits() {
          la fermeture ordonnée par elle-même ne doit pas être annulée"
     );
 }
+
+/// UC-05, extension 5a : « Non » referme la demande de confirmation,
+/// l'application reste ouverte — jamais de fermeture ordonnée.
+#[test]
+fn cancelling_quit_closes_confirmation_and_keeps_the_app_running() {
+    // Précondition : l'application est lancée en mode barre d'état
+    // système ; le chemin OS jusqu'à la confirmation (étapes 1-4 du
+    // scénario primaire) est couvert par le test du scénario primaire.
+    let mut harness = Harness::new_ui_state(|ui, host: &mut Host| host.frame(ui), Host::new());
+
+    harness.state_mut().runtime.receive(Message::QuitRequested);
+    harness.run();
+    assert!(
+        harness
+            .query_by_label_contains(soporifique::labels::QUIT_CONFIRMATION_TEXT)
+            .is_some(),
+        "[préparation] la demande de confirmation doit être affichée"
+    );
+
+    // 5a.1 : l'utilisateur clique sur « Non ».
+    let cancel_button = harness.get_by_label(soporifique::labels::QUIT_CANCEL_BUTTON);
+    cancel_button.click();
+    harness.run();
+
+    // 5a.2 : la demande de confirmation disparaît…
+    assert!(
+        harness
+            .query_by_label_contains(soporifique::labels::QUIT_CONFIRMATION_TEXT)
+            .is_none(),
+        "[5a.2] la demande de confirmation doit disparaître après « Non »"
+    );
+
+    //     …et l'application reste ouverte : aucune fermeture ordonnée.
+    let host = harness.state();
+    assert!(
+        !host.ordered_effects.contains(&WindowEffect::Close),
+        "[5a.2] cliquer « Non » ne doit jamais ordonner la fermeture \
+         (un bouton Non inversé avec Oui serait invisible sans ce test)"
+    );
+    assert!(
+        !host.exited,
+        "[5a.2] l'application doit rester ouverte après « Non »"
+    );
+}
