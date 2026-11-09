@@ -41,7 +41,7 @@ design with types ; couverture mesurée dès que tout est vert.
 - **Publication toujours manuelle** : quelle que soit la formulation de la demande
   (« crée », « publie »…), l'agent s'arrête au brouillon de Release — il ne publie
   **jamais** ; c'est l'utilisateur qui publie après relecture.
-[À ADAPTER] Workflow CI : pas de CI pour l'instant (dépôt local). À compléter si le projet est publié.
+Workflow CI : GitHub Actions (`.github/workflows/ci.yml`) — build + tests + clippy (`-D warnings`) sur chaque push/pull request vers master sur https://github.com/Nykkolas/soporifique.
 
 ### Workflow « la spec est le UC »
 - La boucle par défaut pour toute fonctionnalité ou correction vit dans `docs/SPEC-UC.md` :

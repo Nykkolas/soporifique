@@ -1,0 +1,36 @@
+# CI Soporifique — mêmes exigences que la règle locale : tout vert,
+# clippy muet. Application Linux uniquement (tray DBus, eframe) : un
+# seul job ubuntu suffit.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  tests:
+    name: Build, tests et clippy (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain stable (avec clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache des dépendances
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --all-targets
+
+      - name: Tests (unitaires + spec E2E headless)
+        run: cargo test
+
+      - name: Clippy — zéro warning exigé
+        run: cargo clippy --all-targets -- -D warnings

@@ -1,5 +1,7 @@
 # Soporifique 🌙
 
+[![CI](https://github.com/Nykkolas/soporifique/actions/workflows/ci.yml/badge.svg)](https://github.com/Nykkolas/soporifique/actions/workflows/ci.yml)
+
 Soporifique veille sur la batterie de votre portable : quand le niveau
 franchit le seuil que vous avez choisi, la machine entre en hibernation
 — endormez-vous, il veille.
