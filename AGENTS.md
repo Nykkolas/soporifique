@@ -83,6 +83,7 @@ Frontières à respecter :
 - **Ubiquitous language** : le vocabulaire du domaine vit dans `docs/GLOSSAIRE.md` (terme FR ↔ identifiant de code) ; les libellés UI français sont des termes du glossaire, regroupés dans le module `labels` ; l'agent relève les candidats, l'utilisateur arbitre et rédige.
 - **`docs/usecases/`** : UC Cockburn léger (`uc-template.md`) et règles partagées **SR** — *shared rule*, équivalent anglais des « rc » de rawtandem (`sr-template.md`, index `sr-00-regles-communes.md`). La plume reste à l'utilisateur.
 - **Non couvert permanent** (à rappeler dans chaque rapport de couverture) : la vraie hibernation n'est pas rejouable en test — vérifiée en recette manuelle seulement ; un mode essai (dry run) couvrira la même chaîne côté tests.
+- **Logique testable vs colle non testable** (préférence durable n° 8, `../agents-shared/preferences-dev.md`) : séparer au maximum la logique métier/applicative testable des fonctions non testables (affichage, communications avec des tiers). Toute décision vit dans la lib testée (`update`, `runtime`) et retourne des effets/Command explicites ; le binaire (`main.rs`, `tray.rs`) n'est que de la colle les exécutant — aucune décision dedans. Une décision logée dans le harnais est invisible aux tests et n'apparaît qu'en recette manuelle.
 
 ## Bonnes pratiques générales
 
