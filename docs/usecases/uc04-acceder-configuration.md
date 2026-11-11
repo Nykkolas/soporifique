@@ -29,7 +29,7 @@
     3. L'utilisateur clique sur cette option
     4. L'application ferme le menu avant d'afficher la fenêtre du scénario primaire
 
-2a. Si l'utilisateur clique gauche alors que la fenêtre de configuration est affichée, la fenêtre de paramètre revient en avant plan
+2a. Si l'utilisateur clique gauche sur l'icône dans la barre d'état alors que la fenêtre de configuration est affichée en arrière plan, la fenêtre de paramètre revient en avant plan
 
 2b. 
     1. Si l'utilisateur clique droit alors que la fenêtre de configuration est affichée, le menu s'affiche

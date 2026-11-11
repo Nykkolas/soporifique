@@ -65,12 +65,13 @@ fn resolve_quit(model: Model, confirmed: bool) -> (Model, Vec<Command>) {
 
 /// UC-04, étapes 1-1a → 2 : la fenêtre de configuration s'ouvre,
 /// retenant les paramètres du moment pour « Annuler » (retour à la
-/// valeur d'ouverture, extension 4a). Ouverture idempotente : déjà
-/// ouverte → inchangée.
+/// valeur d'ouverture, extension 4a). Déjà ouverte (extensions 2a/2b) :
+/// le modèle est inchangé, le geste devient une commande d'avant-plan
+/// — la décision de fenêtre vit au runtime, qui la traduit.
 #[allow(clippy::needless_update)]
 fn open_config(model: Model) -> (Model, Vec<Command>) {
     if model.config_window.is_some() {
-        return (model, Vec::new());
+        return (model, vec![Command::RaiseWindow]);
     }
     (
         Model {
@@ -273,12 +274,23 @@ mod tests {
 
     #[test]
     fn config_open_is_idempotent() {
-        let (mut model, _) = update(Model::default(), Message::ConfigOpenRequested);
+        let (mut model, commands) = update(Model::default(), Message::ConfigOpenRequested);
+        assert!(
+            commands.is_empty(),
+            "l'ouverture elle-même n'ordonne rien : le modèle est la vérité"
+        );
         model.test_param = true; // édition pendant que la fenêtre est ouverte
-        let (model, _) = update(model, Message::ConfigOpenRequested);
+        let (model, commands) = update(model, Message::ConfigOpenRequested);
         assert!(
             model.config_window.is_some() && model.test_param,
-            "réouvrir une fenêtre déjà ouverte ne doit rien changer (extension 2a)"
+            "réouvrir une fenêtre déjà ouverte ne doit rien changer au modèle \
+             (extension 2a)"
+        );
+        assert_eq!(
+            commands,
+            vec![Command::RaiseWindow],
+            "le geste sur une fenêtre déjà ouverte devient une commande \
+             d'avant-plan (extensions 2a/2b)"
         );
     }
 

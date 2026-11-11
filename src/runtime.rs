@@ -31,6 +31,10 @@ pub enum WindowEffect {
         /// Titre de la fenêtre tant qu'elle est montrée.
         title: String,
     },
+    /// Ramener la fenêtre racine à l'avant-plan (UC-04, extensions
+    /// 2a/2b : la demande arrive alors qu'elle est déjà affichée —
+    /// exécuté par le harnais, sans cache-remonté).
+    Raise,
     /// Cacher la fenêtre racine (titre remis).
     Hide {
         /// Titre à remettre.
@@ -184,6 +188,10 @@ impl Runtime {
                     self.self_close = true;
                     effects.push(WindowEffect::Close);
                 }
+                // UC-04, extensions 2a/2b : la fenêtre est déjà affichée
+                // (le modèle n'a pas changé, cf. `open_config`) — la
+                // remonter sans jamais la cacher (clignotement).
+                Command::RaiseWindow => effects.push(WindowEffect::Raise),
                 Command::SaveConfig { saved } => {
                     effects.push(WindowEffect::SaveConfig { saved });
                 }
@@ -290,6 +298,23 @@ mod tests {
         );
         assert!(effects.contains(&WindowEffect::Repaint));
         assert!(runtime.model().config_window.is_some());
+    }
+
+    #[test]
+    fn config_gesture_while_shown_orders_raise_alone() {
+        let mut runtime = Runtime::new(Model::default());
+        runtime.step(false); // anti-flash : la racine se cache au tick 2
+        runtime.step(false);
+        runtime.receive(Message::ConfigOpenRequested);
+        runtime.step(false); // la fenêtre de configuration se montre
+        runtime.receive(Message::ConfigOpenRequested); // extensions 2a/2b
+        let effects = runtime.step(false);
+        assert_eq!(
+            effects,
+            vec![WindowEffect::Raise],
+            "le geste sur une configuration déjà affichée doit ordonner \
+             l'avant-plan, lui seul — jamais de cache-remonté (clignotement)"
+        );
     }
 
     #[test]

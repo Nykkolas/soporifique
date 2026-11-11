@@ -105,6 +105,10 @@ impl Soporifique {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
             }
+            // UC-04, extensions 2a/2b : la fenêtre est déjà affichée,
+            // la ramener à l'avant-plan (winit : focus — sans effet si
+            // cachée ou Wayland, cf. `egui::ViewportCommand`).
+            WindowEffect::Raise => ctx.send_viewport_cmd(egui::ViewportCommand::Focus),
             // UC-04, étape 5 : exécution réelle de la persistance sur
             // le stockage injecté, puis rapport du résultat au cœur
             // (chaque Command rapporte — la fenêtre se referme au
