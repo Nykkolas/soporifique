@@ -70,7 +70,10 @@ impl ConfigStore for FileConfigStore {
             return Ok(None);
         }
         let contents = fs::read_to_string(&self.path).map_err(|error| {
-            format!("Unable to read config file {}: {error}", self.path.display())
+            format!(
+                "Unable to read config file {}: {error}",
+                self.path.display()
+            )
         })?;
         parse_saved(&contents).map(Some)
     }
@@ -82,7 +85,10 @@ impl ConfigStore for FileConfigStore {
             })?;
         }
         fs::write(&self.path, render_saved(saved)).map_err(|error| {
-            format!("Unable to write config file {}: {error}", self.path.display())
+            format!(
+                "Unable to write config file {}: {error}",
+                self.path.display()
+            )
         })
     }
 }
@@ -108,13 +114,13 @@ pub fn parse_saved(contents: &str) -> Result<SavedConfig, String> {
         match key {
             "test_param" => {
                 if test_param.is_some() {
-                    return Err(format!("Duplicate config key `test_param` at line {lineno}"));
+                    return Err(format!(
+                        "Duplicate config key `test_param` at line {lineno}"
+                    ));
                 }
                 test_param = Some(parse_bool(&format!("test_param (line {lineno})"), value)?);
             }
-            unknown => {
-                return Err(format!("Unknown config key `{unknown}` at line {lineno}"))
-            }
+            unknown => return Err(format!("Unknown config key `{unknown}` at line {lineno}")),
         }
     }
     Ok(SavedConfig {
@@ -238,8 +244,7 @@ mod tests {
         assert!(!model.test_param, "premier lancement : défauts");
         assert!(warning.is_none());
 
-        let (model, warning) =
-            boot_model(&MemoryStore(Some(SavedConfig { test_param: true })));
+        let (model, warning) = boot_model(&MemoryStore(Some(SavedConfig { test_param: true })));
         assert!(model.test_param, "paramètre sauvé relu au démarrage");
         assert!(warning.is_none());
 

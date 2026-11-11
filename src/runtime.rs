@@ -9,8 +9,8 @@
 //! lib, car seule la lib est testable »).
 
 use crate::{
-    command::Command, labels, message::Message, model::Model, store::SavedConfig,
-    update::update, view::view,
+    command::Command, labels, message::Message, model::Model, store::SavedConfig, update::update,
+    view::view,
 };
 
 /// Tick de `step` à partir duquel la fenêtre racine peut être cachée :
@@ -234,7 +234,10 @@ mod tests {
         assert!(!effects.contains(&hide()), "rien à cacher au premier tick");
         // Deuxième cycle : la fenêtre racine disparaît pour de bon.
         let effects = runtime.step(false);
-        assert!(effects.contains(&hide()), "la racine doit être cachée au tick 2");
+        assert!(
+            effects.contains(&hide()),
+            "la racine doit être cachée au tick 2"
+        );
     }
 
     #[test]
@@ -242,7 +245,10 @@ mod tests {
         let mut runtime = Runtime::new(Model::default());
         runtime.receive(Message::QuitRequested);
         let effects = runtime.step(false);
-        assert!(effects.contains(&show()), "la demande de confirmation doit montrer la fenêtre");
+        assert!(
+            effects.contains(&show()),
+            "la demande de confirmation doit montrer la fenêtre"
+        );
         assert!(
             effects.contains(&WindowEffect::Repaint),
             "une fenêtre cachée ne se réveille pas sans repaint"
@@ -261,8 +267,14 @@ mod tests {
             effects.contains(&WindowEffect::CancelClose),
             "le ✕ de l'utilisateur doit être annulé (✕ ≡ Non)"
         );
-        assert!(!effects.contains(&WindowEffect::Close), "le ✕ ne quitte jamais");
-        assert!(runtime.model().quit_request.is_none(), "« Non » referme la demande");
+        assert!(
+            !effects.contains(&WindowEffect::Close),
+            "le ✕ ne quitte jamais"
+        );
+        assert!(
+            runtime.model().quit_request.is_none(),
+            "« Non » referme la demande"
+        );
     }
 
     #[test]
@@ -300,14 +312,18 @@ mod tests {
             "« Enregistrer » doit ordonner la persistance avec les valeurs au clic"
         );
         assert!(
-            !effects.iter().any(|effect| matches!(effect, WindowEffect::Hide { .. })),
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, WindowEffect::Hide { .. })),
             "la fenêtre ne se referme qu'au résultat de la persistance (étapes 5 → 6)"
         );
         // Le harnais rapporte le succès : la fenêtre se referme alors.
         runtime.receive(Message::ConfigSaved);
         let effects = runtime.step(false);
         assert!(
-            effects.iter().any(|effect| matches!(effect, WindowEffect::Hide { .. })),
+            effects
+                .iter()
+                .any(|effect| matches!(effect, WindowEffect::Hide { .. })),
             "persistance réussie : la fenêtre se referme (étape 6)"
         );
         assert!(
@@ -328,7 +344,10 @@ mod tests {
             effects.contains(&WindowEffect::CancelClose),
             "le ✕ de l'utilisateur doit être annulé (garde du harnais)"
         );
-        assert!(!effects.contains(&WindowEffect::Close), "le ✕ ne quitte jamais");
+        assert!(
+            !effects.contains(&WindowEffect::Close),
+            "le ✕ ne quitte jamais"
+        );
         assert!(
             runtime.model().config_window.is_none(),
             "le ✕ referme la configuration (✕ ≡ Annuler, extension 4a)"
@@ -346,7 +365,10 @@ mod tests {
         runtime.receive(Message::QuitConfirmed);
         // L'arrêt ordonné devient un effet Close.
         let effects = runtime.step(false);
-        assert!(effects.contains(&WindowEffect::Close), "« Oui » doit ordonner la fermeture");
+        assert!(
+            effects.contains(&WindowEffect::Close),
+            "« Oui » doit ordonner la fermeture"
+        );
         assert!(!effects.contains(&WindowEffect::CancelClose));
         // winit renvoie ce Close sous forme d'évènement à la frame
         // suivante : il ne doit PAS être annulé (bug de recette UC-05).
@@ -365,7 +387,10 @@ mod tests {
         runtime.receive(Message::QuitCancelled);
         let effects = runtime.step(false);
         assert!(effects.contains(&hide()), "« Non » referme la fenêtre");
-        assert!(!effects.contains(&WindowEffect::Close), "« Non » n'ordonne jamais la fermeture");
+        assert!(
+            !effects.contains(&WindowEffect::Close),
+            "« Non » n'ordonne jamais la fermeture"
+        );
     }
 
     /// Contrat de construction : `Runtime::default()` et
@@ -392,7 +417,8 @@ mod tests {
         let mut via_new = Runtime::new(Model::default());
         let mut via_default = Runtime::default();
         assert_eq!(
-            scenario(&mut via_new), scenario(&mut via_default),
+            scenario(&mut via_new),
+            scenario(&mut via_default),
             "Runtime::default() et Runtime::new(Model::default()) doivent être indiscernables \
              (même état initial, même comportement)"
         );

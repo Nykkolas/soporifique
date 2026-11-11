@@ -9,9 +9,10 @@
 //!   production, pas une copie. Ne reste simulé que la partie OS :
 //!   - étapes 1–2 : le menu de la barre d'état est rendu par l'hôte de
 //!     la zone de notification (DBus/OS) — clics OS natifs non
-//!     rejouables headless. Le test joue le rôle de l'hôte en activant
-//!     l'entrée « Quitter Soporifique » au point producteur de
-//!     Messages, exactement comme le service tray le fera ;
+//!     rejouables headless. Ses éléments sont vérifiés par inspection
+//!     du modèle du menu (cf. `docs/RUST-EGUI.md`, `tray_menu`) : le
+//!     test y active l'entrée « Quitter Soporifique » au point
+//!     producteur de Messages, exactement comme le service tray ;
 //!   - le miroir winit : notre `WindowEffect::Close` revient à la frame
 //!     suivante sous forme d'évènement `Close` en entrée
 //!     (indistinguable du ✕ de l'utilisateur), et sans `CancelClose`
@@ -19,13 +20,30 @@
 //!   - l'arrêt réel du processus : la vérité finale reste la recette
 //!     manuelle.
 
-use egui_kittest::{kittest::Queryable, Harness};
-use soporifique::message::Message;
+use egui_kittest::{Harness, kittest::Queryable};
 use soporifique::runtime::WindowEffect;
 
 use common::Host;
 
 mod common;
+
+/// Activation de l'entrée « Quitter Soporifique » du menu de la barre
+/// d'état : inspection du modèle du menu (cf. cartouche) puis jeu du
+/// geste au point producteur de Messages. Échoue si l'entrée
+/// disparaît, change de libellé ou émet le mauvais geste.
+fn quit_entry_message() -> soporifique::message::Message {
+    soporifique::tray_menu::menu()
+        .into_iter()
+        .find(|entry| entry.label == soporifique::labels::TRAY_MENU_QUIT)
+        .unwrap_or_else(|| {
+            panic!(
+                "[étapes 1-2] le menu du clic droit doit contenir \
+                 « {} » (libellé exact du glossaire — UC-05, étape 2)",
+                soporifique::labels::TRAY_MENU_QUIT
+            )
+        })
+        .message
+}
 
 // ------------------------------------------------------------------ le test
 
@@ -37,10 +55,11 @@ fn quitting_from_tray_menu_shows_confirmation_then_exits() {
     // système (host simulé pour la partie OS, cf. cartouche).
     let mut harness = Harness::new_ui_state(|ui, host: &mut Host| host.frame(ui), Host::new());
 
-    // Étapes 1–2 : menu rendu par l'hôte de la barre d'état — non couvert.
-    // Étape 3 : l'utilisateur clique sur « Quitter Soporifique » — le test
-    // joue le rôle de l'hôte de la zone de notification (cartouche).
-    harness.state_mut().runtime.receive(Message::QuitRequested);
+    // Étapes 1–2 : menu rendu par l'hôte de la barre d'état — ses
+    // éléments sont vérifiés par inspection du modèle (cf. cartouche).
+    // Étape 3 : l'utilisateur clique sur « Quitter Soporifique » — le
+    // test active la vraie entrée du menu au point producteur.
+    harness.state_mut().runtime.receive(quit_entry_message());
     harness.run();
 
     // Étape 4 : l'application affiche la demande de confirmation, avec
@@ -93,7 +112,7 @@ fn cancelling_quit_closes_confirmation_and_keeps_the_app_running() {
     // scénario primaire) est couvert par le test du scénario primaire.
     let mut harness = Harness::new_ui_state(|ui, host: &mut Host| host.frame(ui), Host::new());
 
-    harness.state_mut().runtime.receive(Message::QuitRequested);
+    harness.state_mut().runtime.receive(quit_entry_message());
     harness.run();
     assert!(
         harness

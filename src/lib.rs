@@ -11,5 +11,6 @@ pub mod message;
 pub mod model;
 pub mod runtime;
 pub mod store;
+pub mod tray_menu;
 pub mod update;
 pub mod view;

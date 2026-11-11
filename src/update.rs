@@ -183,30 +183,49 @@ mod tests {
     fn quit_requested_opens_the_confirmation() {
         let model = Model::default();
         let (model, commands) = update(model, Message::QuitRequested);
-        assert!(model.quit_request.is_some(), "la demande de confirmation doit s'ouvrir");
-        assert!(commands.is_empty(), "aucun arrêt n'est ordonné sans confirmation");
+        assert!(
+            model.quit_request.is_some(),
+            "la demande de confirmation doit s'ouvrir"
+        );
+        assert!(
+            commands.is_empty(),
+            "aucun arrêt n'est ordonné sans confirmation"
+        );
     }
 
     #[test]
     fn quit_confirmed_orders_exit_only_when_asked() {
         let (model, _) = update(Model::default(), Message::QuitRequested);
         let (model, commands) = update(model, Message::QuitConfirmed);
-        assert!(model.quit_request.is_none(), "la demande se referme après confirmation");
-        assert_eq!(commands, vec![Command::ExitApplication], "l'arrêt doit être ordonné");
+        assert!(
+            model.quit_request.is_none(),
+            "la demande se referme après confirmation"
+        );
+        assert_eq!(
+            commands,
+            vec![Command::ExitApplication],
+            "l'arrêt doit être ordonné"
+        );
     }
 
     #[test]
     fn quit_confirmed_without_request_is_ignored() {
         let (model, commands) = update(Model::default(), Message::QuitConfirmed);
         assert!(model.quit_request.is_none());
-        assert!(commands.is_empty(), "aucun arrêt sans demande ouverte : garde d'état");
+        assert!(
+            commands.is_empty(),
+            "aucun arrêt sans demande ouverte : garde d'état"
+        );
     }
 
     #[test]
     fn quit_cancelled_closes_the_request_without_exit() {
         let (model, _) = update(Model::default(), Message::QuitRequested);
         let (model, commands) = update(model, Message::QuitCancelled);
-        assert!(model.quit_request.is_none(), "« Non » referme la demande (extension 5a)");
+        assert!(
+            model.quit_request.is_none(),
+            "« Non » referme la demande (extension 5a)"
+        );
         assert!(commands.is_empty(), "« Non » n'ordonne jamais l'arrêt");
     }
 
@@ -220,21 +239,30 @@ mod tests {
     #[test]
     fn default_model_boots_with_params_unset() {
         let model = Model::default();
-        assert!(!model.test_param, "premier lancement : paramètres par défaut");
+        assert!(
+            !model.test_param,
+            "premier lancement : paramètres par défaut"
+        );
         assert!(model.quit_request.is_none() && model.config_window.is_none());
     }
 
     #[test]
     fn model_comes_from_saved_config() {
         let model = Model::from_saved(&SavedConfig { test_param: true });
-        assert!(model.test_param, "le modèle boote depuis les paramètres persistés");
+        assert!(
+            model.test_param,
+            "le modèle boote depuis les paramètres persistés"
+        );
     }
 
     #[test]
     fn config_open_opens_the_window_and_remembers_the_params() {
         let model = Model::from_saved(&SavedConfig { test_param: true });
         let (model, commands) = update(model, Message::ConfigOpenRequested);
-        assert!(model.config_window.is_some(), "la fenêtre de configuration doit s'ouvrir");
+        assert!(
+            model.config_window.is_some(),
+            "la fenêtre de configuration doit s'ouvrir"
+        );
         assert_eq!(
             model.config_window.map(|config| config.test_param_at_open),
             Some(true),
@@ -275,7 +303,10 @@ mod tests {
         let (model, _) = update(model, Message::TestParamChanged(true));
         let (model, commands) = update(model, Message::ConfigSaveRequested);
         assert!(
-            model.config_window.as_ref().is_some_and(|config| config.saving),
+            model
+                .config_window
+                .as_ref()
+                .is_some_and(|config| config.saving),
             "après « Enregistrer » la fenêtre attend le résultat (étapes 4→5)"
         );
         assert_eq!(
@@ -292,9 +323,15 @@ mod tests {
         let (model, _) = update(Model::default(), Message::ConfigOpenRequested);
         let (model, _) = update(model, Message::ConfigSaveRequested);
         let (model, commands) = update(model, Message::ConfigSaveRequested);
-        assert!(commands.is_empty(), "une sauvegarde à la fois : la double demande est ignorée");
         assert!(
-            model.config_window.as_ref().is_some_and(|config| config.saving),
+            commands.is_empty(),
+            "une sauvegarde à la fois : la double demande est ignorée"
+        );
+        assert!(
+            model
+                .config_window
+                .as_ref()
+                .is_some_and(|config| config.saving),
             "la première sauvegarde attend toujours son résultat"
         );
     }
@@ -303,7 +340,10 @@ mod tests {
     fn save_requested_without_window_is_ignored() {
         let (model, commands) = update(Model::default(), Message::ConfigSaveRequested);
         assert!(model.config_window.is_none());
-        assert!(commands.is_empty(), "garde d'état : rien à persister fenêtre fermée");
+        assert!(
+            commands.is_empty(),
+            "garde d'état : rien à persister fenêtre fermée"
+        );
     }
 
     #[test]
@@ -316,7 +356,10 @@ mod tests {
             model.config_window.is_none(),
             "persistance réussie : la fenêtre se referme (étape 6)"
         );
-        assert!(model.test_param, "les paramètres du moment du clic sont conservés (étape 5)");
+        assert!(
+            model.test_param,
+            "les paramètres du moment du clic sont conservés (étape 5)"
+        );
         assert!(commands.is_empty());
     }
 
@@ -325,7 +368,9 @@ mod tests {
         let (model, _) = update(Model::default(), Message::ConfigOpenRequested);
         let (model, _) = update(model, Message::ConfigSaveRequested);
         let (model, commands) = update(model, Message::ConfigSaveFailed("disk full".into()));
-        let window = model.config_window.expect("la fenêtre reste ouverte en cas d'échec");
+        let window = model
+            .config_window
+            .expect("la fenêtre reste ouverte en cas d'échec");
         assert!(!window.saving, "les actions reprennent");
         assert_eq!(
             window.error.as_deref(),
@@ -339,7 +384,10 @@ mod tests {
     fn save_result_without_pending_save_is_ignored() {
         let (model, commands) = update(Model::default(), Message::ConfigSaved);
         assert!(model.config_window.is_none());
-        assert!(commands.is_empty(), "garde d'état : aucun résultat inattendu n'agit");
+        assert!(
+            commands.is_empty(),
+            "garde d'état : aucun résultat inattendu n'agit"
+        );
 
         let (model, _) = update(Model::default(), Message::ConfigOpenRequested);
         let (model, commands) = update(model, Message::ConfigSaved);
@@ -355,7 +403,10 @@ mod tests {
         let (model, _) = update(Model::default(), Message::ConfigOpenRequested);
         let (model, _) = update(model, Message::TestParamChanged(true));
         let (model, commands) = update(model, Message::ConfigCancelled);
-        assert!(model.config_window.is_none(), "« Annuler » referme la fenêtre (extension 4a)");
+        assert!(
+            model.config_window.is_none(),
+            "« Annuler » referme la fenêtre (extension 4a)"
+        );
         assert!(
             !model.test_param,
             "« Annuler » referme sans enregistrer : retour à la valeur d'ouverture"

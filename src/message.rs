@@ -1,5 +1,6 @@
 /// Messages : un `Message` par geste, tous producteurs confondus
 /// (UI egui, tray ksni, timer de polling) — cf. `docs/RUST-TEA.md`.
+#[derive(Clone)]
 pub enum Message {
     /// Entrée « Quitter Soporifique » activée dans le menu de la barre
     /// d'état système (producteur : tray, UC-05 étape 3).

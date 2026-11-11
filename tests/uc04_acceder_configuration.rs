@@ -2,8 +2,9 @@
 //! actuelle ».
 //!
 //! - Document source : `docs/usecases/uc04-acceder-configuration.md`
-//!   (ce test joue le **scénario primaire** ; les extensions 1a, 2a,
-//!   2b et 4a auront leurs propres tests à l'implémentation).
+//!   (ce fichier joue le **scénario primaire** et l'**extension 1a** ;
+//!   les extensions 2a, 2b et 4a auront leurs propres tests à
+//!   l'implémentation).
 //! - Coverage : instancié.
 //! - Périmètre : la gestion de la sauvegarde vit dans ce UC (étape 5 :
 //!   persister sur disque à « Enregistrer », relecture au lancement).
@@ -12,13 +13,15 @@
 //!   les paramètres réels viendront avec leurs UC (le seuil avec
 //!   l'UC-01), la mécanique de sauvegarde restera ici.
 //! - Le test conduit le **vrai** runtime (`soporifique::runtime`) :
-//!   model/update/view et décisions sont le code de production, pas
-//!   une copie. Ne reste simulé que la partie OS :
-//!   - étape 1 : le clic gauche arrive par le signal `Activate` de
-//!     l'icône (DBus/StatusNotifierItem) — non rejouable headless. Le
-//!     test joue le rôle de l'hôte de la zone de notification en
-//!     émettant le Message au point producteur, exactement comme
-//!     `tray.rs` le fera ;
+//!   model/update/view et décisions sont le code de production, pas une
+//!   copie. Ne reste simulé que la partie OS :
+//!   - étape 1 / 1a.1-2 : le clic gauche (signal `Activate`) et le menu
+//!     du clic droit arrivent par DBus/StatusNotifierItem — non
+//!     rejouables headless. Les gestes sont joués au point producteur
+//!     de Messages, et les éléments du menu sont vérifiables **par
+//!     inspection du modèle du menu** (cf. `docs/RUST-EGUI.md`) : le
+//!     modèle vit dans la lib, le service DBus (`tray.rs`) n'est qu'un
+//!     détail d'infrastructure ;
 //!   - la fenêtre racine elle-même (montrer/cacher une vraie fenêtre
 //!     Cinnamon) : le test vérifie les **ordres** (`Show`/`Hide`)
 //!     confiés au harnais, pas la fenêtre réelle — recette manuelle ;
@@ -30,14 +33,18 @@
 //!   - le fichier réel de l'utilisateur (`$XDG_CONFIG_HOME/...`) est
 //!     de la colle du harnais (`main.rs`) — non rejouable headless ;
 //!     le chemin injecté par le test est un fichier temporaire.
+//!   - 1a.4 « l'application ferme le menu » : le menu est dessiné par
+//!     l'hôte de la barre d'état, c'est lui qui le referme à
+//!     l'activation d'une entrée — recette manuelle, aucun ordre à
+//!     vérifier de notre côté.
 //! - Le format exact du fichier (une ligne `clé=valeur` par
 //!   paramètre) est un choix d'implémentation figé ici exprès — à
 //!   discrétion de relecture ci-dessous.
 
 use std::path::PathBuf;
 
-use egui_kittest::kittest::{NodeT, Queryable};
 use egui_kittest::Harness;
+use egui_kittest::kittest::{NodeT, Queryable};
 use soporifique::message::Message;
 use soporifique::runtime::WindowEffect;
 use soporifique::store::SavedConfig;
@@ -90,7 +97,10 @@ fn left_click_opens_config_then_save_persists_to_disk_and_next_launch_reloads() 
     // Étape 1 : l'utilisateur clique gauche sur l'icône — le test joue
     // le rôle de l'hôte de la zone de notification (signal `Activate`,
     // cf. cartouche) ; le tray réel émettra ce même Message.
-    harness.state_mut().runtime.receive(Message::ConfigOpenRequested);
+    harness
+        .state_mut()
+        .runtime
+        .receive(Message::ConfigOpenRequested);
     harness.run();
 
     // Étape 2 : l'application ouvre la fenêtre — l'ordre de montrer la
@@ -103,7 +113,10 @@ fn left_click_opens_config_then_save_persists_to_disk_and_next_launch_reloads() 
         "[étape 2] ouvrir la configuration doit ordonner d'afficher la fenêtre"
     );
     assert!(
-        harness.state().ordered_effects.contains(&WindowEffect::Repaint),
+        harness
+            .state()
+            .ordered_effects
+            .contains(&WindowEffect::Repaint),
         "[étape 2] une fenêtre cachée ne se réveille pas sans repaint"
     );
 
@@ -135,12 +148,10 @@ fn left_click_opens_config_then_save_persists_to_disk_and_next_launch_reloads() 
         .flat_map(|role| harness.query_all_by_role(*role))
         .map(|node| node.accesskit_node().label())
         .collect();
-    let mut found_labels: Vec<String> =
-        inputs.into_iter().map(|l| l.unwrap_or_default()).collect();
+    let mut found_labels: Vec<String> = inputs.into_iter().map(|l| l.unwrap_or_default()).collect();
     found_labels.sort();
     found_labels.dedup();
-    let expected_labels: Vec<String> =
-        CONFIG_PARAMS.iter().map(|l| l.to_string()).collect();
+    let expected_labels: Vec<String> = CONFIG_PARAMS.iter().map(|l| l.to_string()).collect();
     assert_eq!(
         found_labels, expected_labels,
         "[étape 2] la fenêtre de configuration ne doit afficher que les \
@@ -150,10 +161,8 @@ fn left_click_opens_config_then_save_persists_to_disk_and_next_launch_reloads() 
     );
 
     // Étape 3 : l'utilisateur modifie le paramètre (coche la case).
-    let checkbox = harness.get_by_role_and_label(
-        egui::Role::CheckBox,
-        soporifique::labels::TEST_PARAM_LABEL,
-    );
+    let checkbox =
+        harness.get_by_role_and_label(egui::Role::CheckBox, soporifique::labels::TEST_PARAM_LABEL);
     checkbox.click();
     harness.run();
     assert_eq!(
@@ -180,9 +189,7 @@ fn left_click_opens_config_then_save_persists_to_disk_and_next_launch_reloads() 
     // `clé=valeur` par paramètre) et les paramètres enregistrés y
     // sont exacts.
     let save_effect = WindowEffect::SaveConfig {
-        saved: SavedConfig {
-            test_param: true,
-        },
+        saved: SavedConfig { test_param: true },
     };
     assert!(
         harness.state().ordered_effects.contains(&save_effect),
@@ -228,7 +235,10 @@ fn left_click_opens_config_then_save_persists_to_disk_and_next_launch_reloads() 
     // Success guarantee : l'application continue à tourner dans la
     // barre d'état système — aucune fermeture n'a jamais été ordonnée.
     assert!(
-        !harness.state().ordered_effects.contains(&WindowEffect::Close),
+        !harness
+            .state()
+            .ordered_effects
+            .contains(&WindowEffect::Close),
         "la configuration ne doit jamais arrêter l'application (barre d'état)"
     );
     assert!(!harness.state().exited, "l'application doit rester lancée");
@@ -238,7 +248,10 @@ fn left_click_opens_config_then_save_persists_to_disk_and_next_launch_reloads() 
     // sauvé — sans jamais cliquer « Enregistrer » cette fois. La
     // vérité lue est celle affichée (l'état coché), pas un recalcul.
     let mut second_launch = Host::booted_harness(&path);
-    second_launch.state_mut().runtime.receive(Message::ConfigOpenRequested);
+    second_launch
+        .state_mut()
+        .runtime
+        .receive(Message::ConfigOpenRequested);
     second_launch.run();
     assert_eq!(
         checkbox_toggled(&second_launch),
@@ -253,19 +266,76 @@ fn left_click_opens_config_then_save_persists_to_disk_and_next_launch_reloads() 
     clean_config_file(&path);
 }
 
+/// UC-04, extension 1a : le clic droit sur l'icône ouvre le menu de la
+/// barre d'état, dont l'option « Configurer... » affiche la fenêtre de
+/// configuration du scénario primaire.
+#[test]
+fn right_click_menu_configure_entry_opens_the_config_window() {
+    // 1a.1-2 : l'utilisateur clique droit, l'hôte de la barre d'état
+    // (Cinnamon/DBus) dessine le menu depuis notre modèle — les
+    // éléments du menu sont vérifiés par inspection du modèle du menu
+    // (cf. `docs/RUST-EGUI.md` et cartouche) : le test y cherche
+    // l'option « Configurer... ».
+    let configure = soporifique::tray_menu::menu()
+        .into_iter()
+        .find(|entry| entry.label == soporifique::labels::TRAY_MENU_CONFIGURE)
+        .unwrap_or_else(|| {
+            panic!(
+                "[1a.2] le menu du clic droit doit contenir une option « {} » \
+                 (configurer = terme du glossaire : libellé exact)",
+                soporifique::labels::TRAY_MENU_CONFIGURE
+            )
+        });
+
+    // 1a.3 : l'utilisateur clique sur cette option — le test joue
+    // l'hôte de la zone de notification au même point producteur que le
+    // service tray réel : l'activation de l'entrée émet son Message.
+    let path = temp_config_path("ext-1a");
+    clean_config_file(&path);
+    let mut harness = Host::booted_harness(&path);
+    harness.state_mut().runtime.receive(configure.message);
+    harness.run();
+
+    //     …et la fenêtre du scénario primaire s'affiche (étape 2 du
+    // primaire), paramètre à l'écran.
+    assert!(
+        harness
+            .query_all_by_role_and_label(
+                egui::Role::CheckBox,
+                soporifique::labels::TEST_PARAM_LABEL
+            )
+            .next()
+            .is_some(),
+        "[1a.3] activer « Configurer... » doit afficher la fenêtre du \
+         scénario primaire, paramètres visibles"
+    );
+    assert!(
+        !harness
+            .state()
+            .ordered_effects
+            .contains(&WindowEffect::Close),
+        "[1a.3] activer « Configurer... » ne doit jamais ordonner l'arrêt de \
+         l'application (l'application vit dans la barre d'état)"
+    );
+
+    // 1a.4 : la refermeture du menu avant la fenêtre est la vérité de
+    // l'hôte OS (Cinnamon referme son menu à l'activation) — recette
+    // manuelle, cf. cartouche.
+
+    clean_config_file(&path);
+}
+
 /// État coché du paramètre d'essai à l'écran (vérité affichée, pas
 /// recalculée du modèle).
 fn checkbox_toggled(harness: &Harness<'_, Host>) -> Option<egui::accesskit::Toggled> {
-    let checkbox = harness.get_by_role_and_label(
-        egui::Role::CheckBox,
-        soporifique::labels::TEST_PARAM_LABEL,
-    );
+    let checkbox =
+        harness.get_by_role_and_label(egui::Role::CheckBox, soporifique::labels::TEST_PARAM_LABEL);
     checkbox.accesskit_node().toggled()
 }
 
-/// Fichier de configuration temporaire unique pour ce test binaire :
-/// chemin temporaire au nom du test + pid (les fichiers du projet ne
-/// sont jamais touchés).
+/// Fichier de configuration temporaire unique pour ce test : chemin
+/// temporaire au nom du test + pid (les fichiers du projet ne sont
+/// jamais touchés).
 fn temp_config_path(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!(
         "soporifique-uc04-{name}-{}.config",

@@ -29,9 +29,7 @@ use soporifique::store::{ConfigStore as _, FileConfigStore, boot_model};
 fn config_path() -> PathBuf {
     let config_home = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config"))
-        })
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
         .unwrap_or_else(|| PathBuf::from(".config"));
     config_home.join(env!("CARGO_PKG_NAME")).join("config")
 }
@@ -117,10 +115,13 @@ impl Soporifique {
                     Err(error) => Message::ConfigSaveFailed(error),
                 };
                 self.runtime.receive(report);
+                // Le rapport ne sera digéré qu'au prochain cycle, et
+                // egui ne fait une passe que sur interaction : demander
+                // la passe qui porte sa décision (refermeture au
+                // succès, affichage de l'erreur sinon).
+                ctx.request_repaint();
             }
-            WindowEffect::CancelClose => {
-                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose)
-            }
+            WindowEffect::CancelClose => ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose),
             WindowEffect::Close => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             WindowEffect::Repaint => ctx.request_repaint(),
         }

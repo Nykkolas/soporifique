@@ -5,21 +5,11 @@
 //! Le tray est un producteur de Messages comme un autre : il émet, la
 //! garde vit dans `update` — aucune logique ici.
 
-use ksni::{menu::StandardItem, Icon, Tray};
+use ksni::{Icon, Tray, menu::StandardItem};
 use std::sync::mpsc::Sender;
 
 use soporifique::labels;
 use soporifique::message::Message;
-
-/// Nom d'icône freedesktop standard « quitter » (UC-05, étape 2 : « un
-/// icône parlant » ; convention plateforme d'abord, cf.
-/// `docs/UX-GENERIC.md`).
-const QUIT_MENU_ICON: &str = "application-exit";
-
-/// Nom d'icône freedesktop standard « configurer » (UC-04, extension
-/// 1a, étape 2 : un icône parlant ; convention plateforme d'abord,
-/// cf. `docs/UX-GENERIC.md`).
-const CONFIG_MENU_ICON: &str = "preferences-system";
 
 /// L'icône : un croissant de lune — Soporifique veille pendant que la
 /// machine s'endort.
@@ -66,28 +56,25 @@ impl Tray for SoporifiqueTray {
     }
 
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
-        vec![
-            StandardItem {
-                label: labels::TRAY_MENU_CONFIGURE.into(),
-                icon_name: CONFIG_MENU_ICON.into(),
-                activate: Box::new(|tray: &mut Self| {
-                    // UC-04, extension 1a, étape 3 : émettre, c'est tout.
-                    tray.post(Message::ConfigOpenRequested);
-                }),
-                ..Default::default()
-            }
-            .into(),
-            StandardItem {
-                label: labels::TRAY_MENU_QUIT.into(),
-                icon_name: QUIT_MENU_ICON.into(),
-                activate: Box::new(|tray: &mut Self| {
-                    // UC-05, étape 3 : émettre, c'est tout.
-                    tray.post(Message::QuitRequested);
-                }),
-                ..Default::default()
-            }
-            .into(),
-        ]
+        // Les décisions (libellés, Messages, noms d'icônes) vivent dans
+        // le modèle de menu de la lib (`tray_menu`) : cette colle
+        // n'expose que le transport DBus — aucune décision ici.
+        soporifique::tray_menu::menu()
+            .into_iter()
+            .map(|entry| {
+                let message = entry.message;
+                StandardItem {
+                    label: entry.label.into(),
+                    icon_name: entry.icon.into(),
+                    activate: Box::new(move |tray: &mut Self| {
+                        // Émettre, c'est tout (UC-04 1a.3 / UC-05 étape 3).
+                        tray.post(message.clone());
+                    }),
+                    ..Default::default()
+                }
+                .into()
+            })
+            .collect()
     }
 }
 
@@ -112,7 +99,11 @@ fn moon_icon() -> Icon {
             let bx = x - 39.0;
             let by = y - 23.0;
             let in_bite = bx * bx + by * by < BITE_RADIUS * BITE_RADIUS;
-            let pixel = if in_moon && !in_bite { INDIGO } else { TRANSPARENT };
+            let pixel = if in_moon && !in_bite {
+                INDIGO
+            } else {
+                TRANSPARENT
+            };
             data.extend_from_slice(&pixel);
         }
     }

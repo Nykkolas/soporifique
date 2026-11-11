@@ -84,10 +84,7 @@ impl Host {
     /// Harnais kittest booté sur le disque (raccourci des specs :
     /// lancer l'application comme `cargo run` le ferait).
     pub fn booted_harness(path: impl AsRef<Path>) -> Harness<'static, Self> {
-        Harness::new_ui_state(
-            |ui, host: &mut Self| host.frame(ui),
-            Self::booted(path),
-        )
+        Harness::new_ui_state(|ui, host: &mut Self| host.frame(ui), Self::booted(path))
     }
 
     /// Une frame : logique du runtime puis vue (même ordre que main.rs).
@@ -117,9 +114,7 @@ impl Host {
                             Ok(()) => Message::ConfigSaved,
                             Err(error) => Message::ConfigSaveFailed(error),
                         },
-                        None => {
-                            Message::ConfigSaveFailed("no config store on this host".into())
-                        }
+                        None => Message::ConfigSaveFailed("no config store on this host".into()),
                     };
                     self.pending_feedback.push(report);
                 }
