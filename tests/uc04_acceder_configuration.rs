@@ -2,9 +2,9 @@
 //! actuelle ».
 //!
 //! - Document source : `docs/usecases/uc04-acceder-configuration.md`
-//!   (ce fichier joue le **scénario primaire**, l'**extension 1a** et
-//!   l'**extension 2a** ; les extensions 2b et 4a auront leurs
-//!   propres tests à l'implémentation).
+//!   (ce fichier joue le **scénario primaire** et les **extensions
+//!   1a, 2a et 2b** ; l'extension 4a aura son propre test à
+//!   l'implémentation).
 //! - Coverage : instancié.
 //! - Périmètre : la gestion de la sauvegarde vit dans ce UC (étape 5 :
 //!   persister sur disque à « Enregistrer », relecture au lancement).
@@ -422,6 +422,118 @@ fn second_left_click_raises_the_background_config_window() {
             .ordered_effects
             .contains(&WindowEffect::Close),
         "[2a] ramener la fenêtre à l'avant-plan ne doit jamais arrêter \
+         l'application (barre d'état)"
+    );
+    assert!(!harness.state().exited, "l'application doit rester lancée");
+
+    clean_config_file(&path);
+}
+
+/// UC-04, extension 2b : la fenêtre de configuration est déjà
+/// ouverte (en arrière-plan) ; l'utilisateur passe par le menu du
+/// clic droit et son option « Configurer... » — la fenêtre revient à
+/// l'avant-plan, sans jamais être refermée ni rouverte.
+#[test]
+fn configure_menu_entry_raises_the_open_config_window() {
+    // 2b.1 : le menu du clic droit est dessiné par l'hôte de la barre
+    // d'état (Cinnamon/DBus) — vérité OS, recette manuelle ; le test
+    // inspecte le modèle du menu (même mécanique que l'extension 1a,
+    // cf. cartouche) et y cherche l'option « Configurer... ».
+    let configure = soporifique::tray_menu::menu()
+        .into_iter()
+        .find(|entry| entry.label == soporifique::labels::TRAY_MENU_CONFIGURE)
+        .unwrap_or_else(|| {
+            panic!(
+                "[2b.1] le menu du clic droit doit contenir une option « {} » \
+                 (configurer = terme du glossaire : libellé exact)",
+                soporifique::labels::TRAY_MENU_CONFIGURE
+            )
+        });
+
+    // Précondition de l'extension : la fenêtre de configuration est
+    // affichée (scénario primaire, étapes 1-2). « En arrière-plan »
+    // est une vérité du gestionnaire de fenêtres — recette manuelle,
+    // déjà confirmée en réel.
+    let path = temp_config_path("ext-2b");
+    clean_config_file(&path);
+    let mut harness = Host::booted_harness(&path);
+    harness
+        .state_mut()
+        .runtime
+        .receive(Message::ConfigOpenRequested);
+    harness.run();
+    assert!(
+        harness
+            .query_all_by_role_and_label(
+                egui::Role::CheckBox,
+                soporifique::labels::TEST_PARAM_LABEL
+            )
+            .next()
+            .is_some(),
+        "[précondition 2b] la fenêtre de configuration doit être affichée \
+         avant le geste de l'extension"
+    );
+    let show_position = harness
+        .state()
+        .ordered_effects
+        .iter()
+        .position(|effect| matches!(effect, WindowEffect::Show { .. }))
+        .expect(
+            "[précondition 2b] l'affichage de la fenêtre doit avoir été \
+         ordonné",
+        );
+    assert!(
+        !harness
+            .state()
+            .ordered_effects
+            .contains(&WindowEffect::Raise),
+        "[précondition 2b] ouvrir la fenêtre ne doit pas ordonner \
+         l'avant-plan : seule la ramener le fait"
+    );
+
+    // 2b.2-3 : l'utilisateur active « Configurer... » — le test joue
+    // l'hôte de la zone de notification au même point producteur que
+    // le service tray réel : l'entrée du modèle émet son Message.
+    harness.state_mut().runtime.receive(configure.message);
+    harness.run();
+
+    // La fenêtre revient à l'avant-plan : l'ordre part vers le
+    // harnais (exécuté par winit — focus, non rejouable headless,
+    // cf. cartouche).
+    assert!(
+        harness.state().ordered_effects[show_position..].contains(&WindowEffect::Raise),
+        "[2b.3] activer « Configurer... » pendant que la fenêtre est déjà \
+         affichée doit ordonner la remise en avant-plan"
+    );
+
+    // La fenêtre n'est ni refermée ni cachée pour être ramenée : un
+    // cache-remonté serait un clignotement, pas un avant-plan.
+    assert!(
+        !harness.state().ordered_effects[show_position..]
+            .iter()
+            .any(|effect| matches!(effect, WindowEffect::Hide { .. })),
+        "[2b.3] ramener la fenêtre à l'avant-plan ne doit jamais passer par \
+         un cache-remonté de la fenêtre"
+    );
+    assert!(
+        harness
+            .query_all_by_role_and_label(
+                egui::Role::CheckBox,
+                soporifique::labels::TEST_PARAM_LABEL
+            )
+            .next()
+            .is_some(),
+        "[2b.3] la fenêtre reste affichée, paramètre visible"
+    );
+
+    // Success guarantee : l'application continue à tourner dans la
+    // barre d'état système — aucune fermeture n'a été ordonnée.
+    assert!(
+        !harness
+            .state()
+            .ordered_effects
+            .contains(&WindowEffect::Close),
+        "[2b.3] ramener la fenêtre à l'avant-plan ne doit jamais arrêter \
          l'application (barre d'état)"
     );
     assert!(!harness.state().exited, "l'application doit rester lancée");
