@@ -7,7 +7,7 @@
 # Contexte
 ***preconditions:*** 
 - La fenêtre de configuration de l'application est visible (UC-04)
-- Si aucune valeur prééxistante n'existe (1er lancement par exemple), la valeur par défaut est 10%
+- Si aucune valeur prééxistante n'existe pas (1er lancement par exemple), la valeur par défaut est 10%
 ***success guarantee:*** La valeur choisie par l'utilisateur est enregistrée même si l'application se ferme et est relancée
 ***minimal guarantee:*** La valeur précédemment choisie n'est pas modifiée
 

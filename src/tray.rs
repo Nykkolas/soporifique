@@ -16,6 +16,11 @@ use soporifique::message::Message;
 /// `docs/UX-GENERIC.md`).
 const QUIT_MENU_ICON: &str = "application-exit";
 
+/// Nom d'icône freedesktop standard « configurer » (UC-04, extension
+/// 1a, étape 2 : un icône parlant ; convention plateforme d'abord,
+/// cf. `docs/UX-GENERIC.md`).
+const CONFIG_MENU_ICON: &str = "preferences-system";
+
 /// L'icône : un croissant de lune — Soporifique veille pendant que la
 /// machine s'endort.
 pub struct SoporifiqueTray {
@@ -54,8 +59,24 @@ impl Tray for SoporifiqueTray {
         vec![moon_icon()]
     }
 
+    /// Clic gauche sur l'icône (signal `Activate`) : UC-04, étape 1 —
+    /// émettre, c'est tout.
+    fn activate(&mut self, _x: i32, _y: i32) {
+        self.post(Message::ConfigOpenRequested);
+    }
+
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
         vec![
+            StandardItem {
+                label: labels::TRAY_MENU_CONFIGURE.into(),
+                icon_name: CONFIG_MENU_ICON.into(),
+                activate: Box::new(|tray: &mut Self| {
+                    // UC-04, extension 1a, étape 3 : émettre, c'est tout.
+                    tray.post(Message::ConfigOpenRequested);
+                }),
+                ..Default::default()
+            }
+            .into(),
             StandardItem {
                 label: labels::TRAY_MENU_QUIT.into(),
                 icon_name: QUIT_MENU_ICON.into(),

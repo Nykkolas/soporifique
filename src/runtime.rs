@@ -9,7 +9,8 @@
 //! lib, car seule la lib est testable »).
 
 use crate::{
-    command::Command, labels, message::Message, model::Model, update::update, view::view,
+    command::Command, labels, message::Message, model::Model, store::SavedConfig,
+    update::update, view::view,
 };
 
 /// Tick de `step` à partir duquel la fenêtre racine peut être cachée :
@@ -19,7 +20,10 @@ use crate::{
 /// d'eframe, à revoir à chaque upgrade.
 const ROOT_HIDE_TICK: u32 = 2;
 
-/// Effet de fenêtre ordonné au harnais — jamais exécuté ici.
+/// Effet ordonné au harnais — jamais exécuté ici. La fenêtre vit à
+/// l'écran dans la plupart des cas, mais tout ce que le harnais doit
+/// exécuter passe par ici (aujourd'hui aussi : la persistance des
+/// paramètres, UC-04 étape 5) : un seul chemin commande → effet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WindowEffect {
     /// Montrer la fenêtre racine pour porter une demande à l'utilisateur.
@@ -32,9 +36,16 @@ pub enum WindowEffect {
         /// Titre à remettre.
         title: String,
     },
-    /// Annuler une fermeture demandée (garde « ✕ ≡ Non » : fermer ne
-    /// quitte jamais l'application de la main de l'utilisateur — règle
-    /// UC-04, extension 5a de UC-05).
+    /// Persister les paramètres sur le disque (UC-04, étape 5) — le
+    /// harnais exécute son stockage injecté puis rapporte le résultat
+    /// (`ConfigSaved` / `ConfigSaveFailed`).
+    SaveConfig {
+        /// Paramètres au moment du clic « Enregistrer ».
+        saved: SavedConfig,
+    },
+    /// Annuler une fermeture demandée (garde « ✕ annule sans
+    /// conséquence » : fermer ne quitte jamais l'application de la
+    /// main de l'utilisateur — référence UC-04, extension 5a de UC-05).
     CancelClose,
     /// Fermer l'application : fermeture ordonnée par elle-même (UC-05,
     /// étape 6). Le harnais la marque comme la nôtre AVANT qu'elle ne
@@ -68,14 +79,16 @@ pub struct Runtime {
 
 impl Default for Runtime {
     fn default() -> Self {
-        Self::new()
+        Self::new(Model::default())
     }
 }
 
 impl Runtime {
-    pub fn new() -> Self {
+    /// Le modèle initial vient du lancement : paramètres relus du
+    /// disque par le harnais via `store::boot_model` (UC-04).
+    pub fn new(model: Model) -> Self {
         Self {
-            model: Model::default(),
+            model,
             pending_commands: Vec::new(),
             logic_ticks: 0,
             root_hidden_once: false,
@@ -106,11 +119,16 @@ impl Runtime {
     pub fn step(&mut self, close_requested: bool) -> Vec<WindowEffect> {
         let mut effects = Vec::new();
 
-        // 1. Garde « ✕ ≡ Non » : la fermeture demandée par l'utilisateur
-        //    est annulée — sauf celle que nous avons ordonnée.
+        // 1. Garde « ✕ annule sans conséquence » : la fermeture demandée
+        //    par l'utilisateur est annulée — sauf celle que nous avons
+        //    ordonnée. Le ✕ referme chaque demande ouverte sans rien
+        //    ordonner ni enregistrer : « Non » pour la confirmation
+        //    (UC-05), « Annuler » pour la configuration (UC-04 — champ
+        //    non tranché par l'UC, défaut d'implémentation cohérent).
         if close_requested && !self.self_close {
             effects.push(WindowEffect::CancelClose);
             self.receive(Message::QuitCancelled);
+            self.receive(Message::ConfigCancelled);
         }
 
         // 2. eframe force l'affichage de la fenêtre après le premier
@@ -128,22 +146,34 @@ impl Runtime {
             });
         }
 
-        // 3. La fenêtre ne vit à l'écran que pour porter une demande
-        //    (aujourd'hui la confirmation d'arrêt, un jour la
-        //    configuration UC-04). `Repaint` porte la passe qui suit :
-        //    une fenêtre cachée ne se réveille pas toute seule.
-        let confirmation_pending = self.model.quit_request.is_some();
-        if confirmation_pending && !self.window_shown {
-            self.window_shown = true;
-            effects.push(WindowEffect::Show {
-                title: labels::TRAY_MENU_QUIT.into(),
-            });
-            effects.push(WindowEffect::Repaint);
-        } else if !confirmation_pending && self.window_shown {
-            self.window_shown = false;
-            effects.push(WindowEffect::Hide {
-                title: labels::APP_TITLE.into(),
-            });
+        // 3. La fenêtre ne vit à l'écran que pour porter une demande :
+        //    la confirmation d'arrêt (UC-05) ou la fenêtre de
+        //    configuration (UC-04). `Repaint` porte la passe qui suit :
+        //    une fenêtre cachée ne se réveille pas toute seule. La
+        //    configuration prime sur le titre (elle est la demande
+        //    principale quand les deux coexistent).
+        let demand_title = if self.model.config_window.is_some() {
+            Some(labels::CONFIG_WINDOW_TITLE)
+        } else if self.model.quit_request.is_some() {
+            Some(labels::TRAY_MENU_QUIT)
+        } else {
+            None
+        };
+        match (demand_title, self.window_shown) {
+            (Some(title), false) => {
+                self.window_shown = true;
+                effects.push(WindowEffect::Show {
+                    title: title.into(),
+                });
+                effects.push(WindowEffect::Repaint);
+            }
+            (None, true) => {
+                self.window_shown = false;
+                effects.push(WindowEffect::Hide {
+                    title: labels::APP_TITLE.into(),
+                });
+            }
+            _ => {}
         }
 
         // 4. Les Command ordonnées par `update` deviennent des effets —
@@ -153,6 +183,9 @@ impl Runtime {
                 Command::ExitApplication => {
                     self.self_close = true;
                     effects.push(WindowEffect::Close);
+                }
+                Command::SaveConfig { saved } => {
+                    effects.push(WindowEffect::SaveConfig { saved });
                 }
             }
         }
@@ -187,9 +220,15 @@ mod tests {
         }
     }
 
+    fn show_config() -> WindowEffect {
+        WindowEffect::Show {
+            title: labels::CONFIG_WINDOW_TITLE.into(),
+        }
+    }
+
     #[test]
     fn eframe_forced_show_is_undone_at_second_tick() {
-        let mut runtime = Runtime::new();
+        let mut runtime = Runtime::new(Model::default());
         // Premier cycle : eframe n'a pas encore forcé l'affichage.
         let effects = runtime.step(false);
         assert!(!effects.contains(&hide()), "rien à cacher au premier tick");
@@ -200,7 +239,7 @@ mod tests {
 
     #[test]
     fn quit_request_shows_the_window() {
-        let mut runtime = Runtime::new();
+        let mut runtime = Runtime::new(Model::default());
         runtime.receive(Message::QuitRequested);
         let effects = runtime.step(false);
         assert!(effects.contains(&show()), "la demande de confirmation doit montrer la fenêtre");
@@ -213,7 +252,7 @@ mod tests {
 
     #[test]
     fn user_close_is_cancelled_and_never_quits() {
-        let mut runtime = Runtime::new();
+        let mut runtime = Runtime::new(Model::default());
         runtime.receive(Message::QuitRequested);
         runtime.step(false);
         // L'utilisateur clique ✕ pendant la confirmation.
@@ -227,8 +266,82 @@ mod tests {
     }
 
     #[test]
+    fn config_request_shows_the_window_with_config_title() {
+        let mut runtime = Runtime::new(Model::default());
+        runtime.step(false); // anti-flash : la racine se cache au tick 2
+        runtime.step(false);
+        runtime.receive(Message::ConfigOpenRequested);
+        let effects = runtime.step(false);
+        assert!(
+            effects.contains(&show_config()),
+            "ouvrir la configuration doit montrer la fenêtre, titrée pour elle (UC-04, étape 2)"
+        );
+        assert!(effects.contains(&WindowEffect::Repaint));
+        assert!(runtime.model().config_window.is_some());
+    }
+
+    #[test]
+    fn save_request_becomes_a_save_effect_and_close_waits_for_its_result() {
+        let mut runtime = Runtime::new(Model::default());
+        runtime.step(false); // anti-flash des ticks 1-2 consommé :
+        runtime.step(false); //  le test ouvre ensuite, comme en vrai
+        runtime.receive(Message::ConfigOpenRequested);
+        runtime.step(false); // la fenêtre se montre
+        runtime.receive(Message::TestParamChanged(true));
+        runtime.receive(Message::ConfigSaveRequested);
+        // Étapes 4 → 5 : la commande de persistance part au harnais,
+        // la fenêtre attend le résultat — pas de refermeture anticipée.
+        let effects = runtime.step(false);
+        assert_eq!(
+            effects,
+            vec![WindowEffect::SaveConfig {
+                saved: SavedConfig { test_param: true }
+            }],
+            "« Enregistrer » doit ordonner la persistance avec les valeurs au clic"
+        );
+        assert!(
+            !effects.iter().any(|effect| matches!(effect, WindowEffect::Hide { .. })),
+            "la fenêtre ne se referme qu'au résultat de la persistance (étapes 5 → 6)"
+        );
+        // Le harnais rapporte le succès : la fenêtre se referme alors.
+        runtime.receive(Message::ConfigSaved);
+        let effects = runtime.step(false);
+        assert!(
+            effects.iter().any(|effect| matches!(effect, WindowEffect::Hide { .. })),
+            "persistance réussie : la fenêtre se referme (étape 6)"
+        );
+        assert!(
+            !effects.contains(&WindowEffect::Close),
+            "la configuration n'arrête jamais l'application"
+        );
+    }
+
+    #[test]
+    fn user_close_cancels_config_without_exit() {
+        let mut runtime = Runtime::new(Model::default());
+        runtime.receive(Message::ConfigOpenRequested);
+        runtime.step(false);
+        runtime.receive(Message::TestParamChanged(true));
+        // L'utilisateur clique ✕ pendant la configuration.
+        let effects = runtime.step(true);
+        assert!(
+            effects.contains(&WindowEffect::CancelClose),
+            "le ✕ de l'utilisateur doit être annulé (garde du harnais)"
+        );
+        assert!(!effects.contains(&WindowEffect::Close), "le ✕ ne quitte jamais");
+        assert!(
+            runtime.model().config_window.is_none(),
+            "le ✕ referme la configuration (✕ ≡ Annuler, extension 4a)"
+        );
+        assert!(
+            !runtime.model().test_param,
+            "le ✕ referme sans enregistrer : retour à la valeur d'ouverture"
+        );
+    }
+
+    #[test]
     fn confirmed_quit_orders_close_and_survives_reflection() {
-        let mut runtime = Runtime::new();
+        let mut runtime = Runtime::new(Model::default());
         runtime.receive(Message::QuitRequested);
         runtime.receive(Message::QuitConfirmed);
         // L'arrêt ordonné devient un effet Close.
@@ -246,7 +359,7 @@ mod tests {
 
     #[test]
     fn cancelled_request_hides_the_window_without_close() {
-        let mut runtime = Runtime::new();
+        let mut runtime = Runtime::new(Model::default());
         runtime.receive(Message::QuitRequested);
         runtime.step(false);
         runtime.receive(Message::QuitCancelled);
@@ -256,7 +369,7 @@ mod tests {
     }
 
     /// Contrat de construction : `Runtime::default()` et
-    /// `Runtime::new()` doivent être comportementalement
+    /// `Runtime::new(Model::default())` doivent être comportementalement
     /// indiscernables. Tautologique tant que `Default` délègue à
     /// `new()` — c'est un filet de sécurité : le jour où les deux
     /// chemins deviennent indépendants (ex. `derive(Default)` sans
@@ -276,12 +389,11 @@ mod tests {
             trace
         }
 
-        let mut via_new = Runtime::new();
+        let mut via_new = Runtime::new(Model::default());
         let mut via_default = Runtime::default();
         assert_eq!(
-            scenario(&mut via_new),
-            scenario(&mut via_default),
-            "Runtime::default() et Runtime::new() doivent être indiscernables \
+            scenario(&mut via_new), scenario(&mut via_default),
+            "Runtime::default() et Runtime::new(Model::default()) doivent être indiscernables \
              (même état initial, même comportement)"
         );
     }

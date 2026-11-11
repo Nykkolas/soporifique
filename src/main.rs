@@ -11,16 +11,30 @@
 //!
 //! Modèle de fenêtres : l'application vit dans la barre d'état ; sa
 //! fenêtre n'est montrée QUE pour porter une demande à l'utilisateur
-//! (aujourd'hui la confirmation d'arrêt UC-05 — un jour la fenêtre de
-//! configuration UC-04).
+//! (confirmation d'arrêt UC-05, fenêtre de configuration UC-04).
 
 mod tray;
 
+use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 
 use eframe::egui;
 use soporifique::message::Message;
 use soporifique::runtime::{Runtime, WindowEffect};
+use soporifique::store::{ConfigStore as _, FileConfigStore, boot_model};
+
+/// Fichier de configuration : `config` sous `$XDG_CONFIG_HOME/soporifique`
+/// (défaut `$HOME/.config/soporifique/config`) — colle du harnais, le
+/// cœur ne connaît ni chemin ni disque (cf. `store.rs`).
+fn config_path() -> PathBuf {
+    let config_home = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config"))
+        })
+        .unwrap_or_else(|| PathBuf::from(".config"));
+    config_home.join(env!("CARGO_PKG_NAME")).join("config")
+}
 
 fn main() -> eframe::Result {
     // Fenêtre unique, cachée au départ : elle n'existe à l'écran que
@@ -43,11 +57,14 @@ fn main() -> eframe::Result {
 }
 
 /// L'application eframe : câble le runtime aux producteurs de Messages
-/// (tray, vue) et traduit ses effets — et rien d'autre.
+/// (tray, vue), traduit ses effets et exécute le stockage — rien d'autre.
 struct Soporifique {
     runtime: Runtime,
     postbox: Receiver<Message>,
     tray: ksni::blocking::Handle<tray::SoporifiqueTray>,
+    /// Persistance des paramètres (UC-04, étape 5) : injectée, le
+    /// cœur ne lit jamais le disque lui-même.
+    store: FileConfigStore,
 }
 
 impl Soporifique {
@@ -57,31 +74,56 @@ impl Soporifique {
         // UC-05 : « lancée en mode barre d'état système »).
         use ksni::blocking::TrayMethods as _;
         let tray = tray::SoporifiqueTray::new(sender, ctx).spawn()?;
+
+        // Lancement : les paramètres persistés au lancement précédent
+        // sont relus ici (UC-04). Échec de lecture : l'application
+        // démarre quand même sur les valeurs par défaut — le journal
+        // détaillé vivra avec son UC (garantie minimale UC-04).
+        let store = FileConfigStore::new(config_path());
+        let (model, warning) = boot_model(&store);
+        if let Some(warning) = warning {
+            eprintln!("{}: {warning}", soporifique::labels::APP_TITLE);
+        }
+
         Ok(Self {
-            runtime: Runtime::new(),
+            runtime: Runtime::new(model),
             postbox: receiver,
             tray,
+            store,
         })
     }
 }
 
-/// Traduction d'un effet du runtime en commandes egui — l'unique
-/// connaissance de winit/eframe de ce binaire.
-fn apply(effect: WindowEffect, ctx: &egui::Context) {
-    match effect {
-        WindowEffect::Show { title } => {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+impl Soporifique {
+    /// Traduction d'un effet du runtime — l'unique connaissance de
+    /// winit/eframe/disque de ce binaire.
+    fn apply(&mut self, effect: WindowEffect, ctx: &egui::Context) {
+        match effect {
+            WindowEffect::Show { title } => {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            }
+            WindowEffect::Hide { title } => {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
+            }
+            // UC-04, étape 5 : exécution réelle de la persistance sur
+            // le stockage injecté, puis rapport du résultat au cœur
+            // (chaque Command rapporte — la fenêtre se referme au
+            // succès seulement, l'échec s'y affiche).
+            WindowEffect::SaveConfig { saved } => {
+                let report = match self.store.save_saved(&saved) {
+                    Ok(()) => Message::ConfigSaved,
+                    Err(error) => Message::ConfigSaveFailed(error),
+                };
+                self.runtime.receive(report);
+            }
+            WindowEffect::CancelClose => {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose)
+            }
+            WindowEffect::Close => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            WindowEffect::Repaint => ctx.request_repaint(),
         }
-        WindowEffect::Hide { title } => {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
-        }
-        WindowEffect::CancelClose => {
-            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose)
-        }
-        WindowEffect::Close => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
-        WindowEffect::Repaint => ctx.request_repaint(),
     }
 }
 
@@ -94,7 +136,7 @@ impl eframe::App for Soporifique {
         }
 
         // 2. Décisions du runtime (pures, testées dans la lib), effets
-        //    traduits en commandes egui.
+        //    traduits en commandes egui — et persistance exécutée.
         let close_requested = ctx.input(|input| {
             input
                 .viewport()
@@ -103,7 +145,7 @@ impl eframe::App for Soporifique {
                 .any(|event| matches!(event, egui::ViewportEvent::Close))
         });
         for effect in self.runtime.step(close_requested) {
-            apply(effect, ctx);
+            self.apply(effect, ctx);
         }
     }
 

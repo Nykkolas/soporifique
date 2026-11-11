@@ -10,5 +10,6 @@ pub mod labels;
 pub mod message;
 pub mod model;
 pub mod runtime;
+pub mod store;
 pub mod update;
 pub mod view;

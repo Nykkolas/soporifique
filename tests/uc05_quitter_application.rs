@@ -21,58 +21,13 @@
 
 use egui_kittest::{kittest::Queryable, Harness};
 use soporifique::message::Message;
-use soporifique::runtime::{Runtime, WindowEffect};
+use soporifique::runtime::WindowEffect;
 
-// ------------------------------------------------------------------ harnais
+use common::Host;
 
-/// Hôte OS simulé autour du vrai [`Runtime`] : une frame = logique
-/// (décisions du runtime, code de production) puis vue.
-struct Host {
-    /// Le vrai runtime de l'application.
-    runtime: Runtime,
-    /// Miroir winit : évènement `Close` en attente pour la frame
-    /// suivante (✕ utilisateur OU notre propre fermeture réfléchie).
-    reflected_close: bool,
-    /// Journal des effets ordonnés par le runtime.
-    ordered_effects: Vec<WindowEffect>,
-    /// Miroir winit : sans CancelClose, une fermeture demandée termine
-    /// l'application.
-    exited: bool,
-}
+mod common;
 
-impl Host {
-    fn new() -> Self {
-        Self {
-            runtime: Runtime::new(),
-            reflected_close: false,
-            ordered_effects: Vec::new(),
-            exited: false,
-        }
-    }
-
-    /// Une frame : logique du runtime puis vue (même ordre que main.rs).
-    fn frame(&mut self, ui: &mut egui::Ui) {
-        let close_requested = self.reflected_close;
-        self.reflected_close = false;
-
-        let effects = self.runtime.step(close_requested);
-        self.ordered_effects.extend(effects.iter().cloned());
-
-        // Vérité OS (cf. cartouche) : une fermeture demandée termine,
-        // sauf CancelClose ; notre propre Close se reflète en entrée.
-        if close_requested && !effects.contains(&WindowEffect::CancelClose) {
-            self.exited = true;
-        }
-        if effects.contains(&WindowEffect::Close) {
-            self.reflected_close = true;
-        }
-
-        // Vue : rend le modèle, émet ses Messages.
-        self.runtime.render(ui);
-    }
-}
-
-// -------------------------------------------------------------- le test
+// ------------------------------------------------------------------ le test
 
 /// UC-05, scénario primaire : quitter depuis le menu de la barre d'état,
 /// confirmation à l'écran, arrêt réel de l'application.
