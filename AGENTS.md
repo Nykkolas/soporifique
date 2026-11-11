@@ -105,8 +105,24 @@ Frontières à respecter :
 
 ## ❌ Erreurs à ne pas reproduire
 
-Spécifiques à ce projet : aucune pour l'instant (vierge). Les leçons
-génériques vivent dans `docs/ERREURS-GENERIC.md` ; les pièges spécifiques
-Rust/egui dans `docs/RUST-TEA.md` et `docs/RUST-EGUI.md`. Toute leçon
-apprise ici est notée (avec le contexte qui l'a révélée) et promue vers
-agents-shared si elle est générique.
+Leçons apprises ici (avec le contexte qui les a révélées) : toutes
+génériques, donc promues vers agents-shared — la puce locale est la
+référence au fichier partagé. Les pièges spécifiques Rust/egui vivent
+dans `docs/RUST-TEA.md` et `docs/RUST-EGUI.md` ; le transit des leçons
+est décrit dans `DECISIONS.md` d'agents-shared.
+
+- **Périmètre d'UC perdu en compaction** (UC-04 : quatre extensions
+  implémentées sans revalidation du cadrage « scénario primaire
+  seul ») → règle « Périmètre : consigné à la validation, jamais
+  élargi en silence » dans `docs/SPEC-UC.md`, décision du 2026-11-11
+  dans `DECISIONS.md`.
+- **Absence vérifiée par l'écran au lieu du disque** (UC-04 4a :
+  « refermer sans enregistrer » prouvé par la case à la réouverture,
+  pas par le fichier inchangé) → règle « une absence se prouve à
+  l'identique » dans `docs/SPEC-UC.md`.
+- **Restauration de mutation par remplacement global** (UC-04 2a : le
+  `sed` de retour a muté une garde jumelle) → « Mutations de
+  vérification » dans `docs/ERREURS-GENERIC.md`.
+- **Repaint manquant après le rapport du harnais** (UC-04 : la
+  fenêtre traînait ouverte après « Enregistrer » jusqu'au prochain
+  geste) → section Repaint de `docs/RUST-EGUI.md`.
