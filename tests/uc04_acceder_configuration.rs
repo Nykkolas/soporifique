@@ -3,8 +3,7 @@
 //!
 //! - Document source : `docs/usecases/uc04-acceder-configuration.md`
 //!   (ce fichier joue le **scénario primaire** et les **extensions
-//!   1a, 2a et 2b** ; l'extension 4a aura son propre test à
-//!   l'implémentation).
+//!   1a, 2a, 2b et 4a**).
 //! - Coverage : instancié.
 //! - Périmètre : la gestion de la sauvegarde vit dans ce UC (étape 5 :
 //!   persister sur disque à « Enregistrer », relecture au lancement).
@@ -535,6 +534,263 @@ fn configure_menu_entry_raises_the_open_config_window() {
             .contains(&WindowEffect::Close),
         "[2b.3] ramener la fenêtre à l'avant-plan ne doit jamais arrêter \
          l'application (barre d'état)"
+    );
+    assert!(!harness.state().exited, "l'application doit rester lancée");
+
+    clean_config_file(&path);
+}
+
+/// UC-04, extension 4a, chemin « Annuler » : l'utilisateur modifie le
+/// paramètre puis clique « Annuler » — la fenêtre se referme sans
+/// enregistrer, le fichier de configuration porte toujours les
+/// paramètres du lancement précédent à l'octet près, et le paramètre
+/// retrouve sa valeur d'ouverture.
+#[test]
+fn cancel_button_closes_the_window_without_saving() {
+    // Lancement précédent : des paramètres sont déjà persistés sur le
+    // disque — la 4a doit les laisser à l'identique, à l'octet près.
+    let path = temp_config_path("ext-4a-cancel");
+    clean_config_file(&path);
+    std::fs::write(&path, "test_param=true\n")
+        .expect("[préparation] écriture du fichier du lancement précédent");
+    let saved_contents = std::fs::read_to_string(&path)
+        .expect("[préparation] lecture du fichier du lancement précédent");
+
+    // Précondition : l'application boote depuis ce disque, la fenêtre
+    // s'ouvre et affiche le paramètre sauvegardé (coché) — puis
+    // l'utilisateur le décoche : l'édition est en attente, prête à
+    // être perdue (c'est toute la 4a).
+    let mut harness = Host::booted_harness(&path);
+    harness
+        .state_mut()
+        .runtime
+        .receive(Message::ConfigOpenRequested);
+    harness.run();
+    assert_eq!(
+        checkbox_toggled(&harness),
+        Some(egui::accesskit::Toggled::True),
+        "[précondition 4a] le paramètre sauvegardé au lancement précédent \
+         doit s'afficher coché"
+    );
+    let checkbox =
+        harness.get_by_role_and_label(egui::Role::CheckBox, soporifique::labels::TEST_PARAM_LABEL);
+    checkbox.click();
+    harness.run();
+    assert_eq!(
+        checkbox_toggled(&harness),
+        Some(egui::accesskit::Toggled::False),
+        "[précondition 4a] le paramètre doit être modifié avant d'annuler"
+    );
+    let show_position = harness
+        .state()
+        .ordered_effects
+        .iter()
+        .position(|effect| matches!(effect, WindowEffect::Show { .. }))
+        .expect(
+            "[précondition 4a] l'affichage de la fenêtre doit avoir été \
+         ordonné",
+        );
+
+    // 4a.1 : l'utilisateur clique « Annuler ».
+    harness
+        .get_by_label(soporifique::labels::CANCEL_BUTTON)
+        .click();
+    harness.run(); // le clic devient Message : la fenêtre se referme
+    harness.run(); // la refermeture devient ordre, la passe de rendu suit
+
+    // 4a.2 : la fenêtre se referme SANS enregistrer — le disque
+    // (vérité extérieure) porte les anciens paramètres à l'octet
+    // près, et aucun ordre de persistance n'est jamais parti.
+    assert!(
+        !harness
+            .state()
+            .ordered_effects
+            .contains(&WindowEffect::SaveConfig {
+                saved: SavedConfig { test_param: false }
+            }),
+        "[4a.2] « Annuler » ne doit jamais ordonner de persister : \
+         l'édition abandonnée ne doit pas partir vers le disque"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&path).expect("[4a.2] lecture du fichier"),
+        saved_contents,
+        "[4a.2] « Annuler » referme sans enregistrer : le fichier de \
+         configuration doit porter À L'IDENTIQUE les paramètres du \
+         lancement précédent"
+    );
+    assert!(
+        harness.state().ordered_effects[show_position..]
+            .iter()
+            .any(|effect| matches!(effect, WindowEffect::Hide { .. })),
+        "[4a.2] « Annuler » doit ordonner de refermer la fenêtre de configuration"
+    );
+    assert!(
+        harness
+            .query_all_by_role_and_label(
+                egui::Role::CheckBox,
+                soporifique::labels::TEST_PARAM_LABEL
+            )
+            .next()
+            .is_none(),
+        "[4a.2] le paramètre ne doit plus être affiché : la fenêtre est refermée"
+    );
+
+    // L'édition est perdue : le paramètre a retrouvé sa valeur
+    // d'ouverture — vérité affichée à la réouverture, pas un recalcul.
+    harness
+        .state_mut()
+        .runtime
+        .receive(Message::ConfigOpenRequested);
+    harness.run();
+    assert_eq!(
+        checkbox_toggled(&harness),
+        Some(egui::accesskit::Toggled::True),
+        "[4a.2] « Annuler » doit restaurer la valeur d'ouverture : \
+         l'édition abandonnée ne doit survivre ni au modèle ni à l'écran"
+    );
+
+    // Success guarantee : l'application continue à tourner dans la
+    // barre d'état système — aucune fermeture n'a été ordonnée.
+    assert!(
+        !harness
+            .state()
+            .ordered_effects
+            .contains(&WindowEffect::Close),
+        "[4a] « Annuler » ne doit jamais arrêter l'application (barre d'état)"
+    );
+    assert!(!harness.state().exited, "l'application doit rester lancée");
+
+    clean_config_file(&path);
+}
+
+/// UC-04, extension 4a, chemin « ✕ » : l'utilisateur modifie le
+/// paramètre puis ferme la fenêtre (par la croix par exemple) — la
+/// fenêtre se referme sans enregistrer (le fichier porte toujours
+/// les paramètres du lancement précédent à l'octet près) et le ✕
+/// n'arrête jamais l'application (elle vit dans la barre d'état).
+#[test]
+fn user_cross_closes_the_window_without_saving_or_quitting() {
+    // Lancement précédent : des paramètres sont déjà persistés sur le
+    // disque — la 4a doit les laisser à l'identique, à l'octet près.
+    let path = temp_config_path("ext-4a-cross");
+    clean_config_file(&path);
+    std::fs::write(&path, "test_param=true\n")
+        .expect("[préparation] écriture du fichier du lancement précédent");
+    let saved_contents = std::fs::read_to_string(&path)
+        .expect("[préparation] lecture du fichier du lancement précédent");
+
+    // Précondition : l'application boote depuis ce disque, la fenêtre
+    // s'ouvre et affiche le paramètre sauvegardé (coché) — puis
+    // l'utilisateur le décoche (cf. le chemin « Annuler », même mise
+    // en scène).
+    let mut harness = Host::booted_harness(&path);
+    harness
+        .state_mut()
+        .runtime
+        .receive(Message::ConfigOpenRequested);
+    harness.run();
+    assert_eq!(
+        checkbox_toggled(&harness),
+        Some(egui::accesskit::Toggled::True),
+        "[précondition 4a ✕] le paramètre sauvegardé au lancement précédent \
+         doit s'afficher coché"
+    );
+    let checkbox =
+        harness.get_by_role_and_label(egui::Role::CheckBox, soporifique::labels::TEST_PARAM_LABEL);
+    checkbox.click();
+    harness.run();
+    assert_eq!(
+        checkbox_toggled(&harness),
+        Some(egui::accesskit::Toggled::False),
+        "[précondition 4a ✕] le paramètre doit être modifié avant de fermer"
+    );
+    let show_position = harness
+        .state()
+        .ordered_effects
+        .iter()
+        .position(|effect| matches!(effect, WindowEffect::Show { .. }))
+        .expect(
+            "[précondition 4a ✕] l'affichage de la fenêtre doit avoir \
+         été ordonné",
+        );
+
+    // 4a.1 : l'utilisateur ferme la fenêtre par la croix — le test
+    // joue winit : la fermeture demandée entre comme vérité du cycle
+    // (miroir de l'évènement `Close` dans main.rs) ; la vraie croix
+    // Cinnamon est recette manuelle.
+    harness.state_mut().reflected_close = true;
+    harness.run();
+
+    // La fermeture demandée est annulée : fermer ne quitte JAMAIS
+    // l'application de la main de l'utilisateur.
+    assert!(
+        harness.state().ordered_effects[show_position..].contains(&WindowEffect::CancelClose),
+        "[4a.1 ✕] la fermeture demandée doit être annulée : le ✕ ne quitte \
+         jamais (barre d'état)"
+    );
+
+    // 4a.2 : la fenêtre se referme SANS enregistrer — même vérité
+    // que le chemin « Annuler » : aucun ordre de persistance, le
+    // disque porte les anciens paramètres à l'octet près, ordre de
+    // refermeture, écran vide.
+    assert!(
+        !harness
+            .state()
+            .ordered_effects
+            .contains(&WindowEffect::SaveConfig {
+                saved: SavedConfig { test_param: false }
+            }),
+        "[4a.2 ✕] fermer ne doit jamais ordonner de persister : \
+         l'édition abandonnée ne doit pas partir vers le disque"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&path).expect("[4a.2 ✕] lecture du fichier"),
+        saved_contents,
+        "[4a.2 ✕] fermer referme sans enregistrer : le fichier de \
+         configuration doit porter À L'IDENTIQUE les paramètres du \
+         lancement précédent"
+    );
+    assert!(
+        harness.state().ordered_effects[show_position..]
+            .iter()
+            .any(|effect| matches!(effect, WindowEffect::Hide { .. })),
+        "[4a.2 ✕] fermer doit ordonner de refermer la fenêtre de configuration"
+    );
+    assert!(
+        harness
+            .query_all_by_role_and_label(
+                egui::Role::CheckBox,
+                soporifique::labels::TEST_PARAM_LABEL
+            )
+            .next()
+            .is_none(),
+        "[4a.2 ✕] le paramètre ne doit plus être affiché : la fenêtre est \
+         refermée"
+    );
+
+    // L'édition est perdue : valeur d'ouverture restaurée (cochée) —
+    // vérité affichée à la réouverture.
+    harness
+        .state_mut()
+        .runtime
+        .receive(Message::ConfigOpenRequested);
+    harness.run();
+    assert_eq!(
+        checkbox_toggled(&harness),
+        Some(egui::accesskit::Toggled::True),
+        "[4a.2 ✕] fermer doit restaurer la valeur d'ouverture : l'édition \
+         abandonnée ne doit survivre ni au modèle ni à l'écran"
+    );
+
+    // Success guarantee : l'application vit toujours dans la barre
+    // d'état — ni fermeture ordonnée par elle-même, ni arrêt.
+    assert!(
+        !harness
+            .state()
+            .ordered_effects
+            .contains(&WindowEffect::Close),
+        "[4a ✕] fermer la fenêtre ne doit jamais arrêter l'application \
+         (barre d'état)"
     );
     assert!(!harness.state().exited, "l'application doit rester lancée");
 
